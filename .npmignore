@@ -1,13 +1,10 @@
-.*
-
-# modules
+.vscode/
+examples/
+src/
+test/
 node_modules/
 
-# sources
-src/
-
-# webpack
-**/webpack.config.js
-
-# ts
-**/tsconfig.json
+.*
+tsconfig.json
+webpack.config.js
+nodemon.json

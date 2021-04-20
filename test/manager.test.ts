@@ -1,41 +1,43 @@
 import { expect } from 'chai';
-import BadPathPart from '../src/errors/BadPathPart';
-import BadResourceType from '../src/errors/BadResourceType';
+import ResourceType from '../src/enums/ResourceType';
 import DiskError from '../src/errors/DiskError';
-import InstanceIdGenerator from '../src/instance/services/InstanceIdGenerator';
-import createDiskManager from '../src/manager';
+import InvalidResourceType from '../src/errors/InvalidResourceType';
+import Resources from '../src/models/Resources';
+import StatusData from '../src/models/StatusData';
+import DiskManager from '../src/services/DiskManager';
+import InstanceIdByTokenStrategy from '../src/services/InstanceIdByTokenStrategy';
 
-const accessToken = <string>process.env.TEST_TOKEN;
-const instanceId = InstanceIdGenerator.generate(accessToken);
-const manager = createDiskManager(accessToken);
+const token = <string>process.env.TEST_TOKEN;
+const idFromToken = new InstanceIdByTokenStrategy(token).get();
 
-describe('manager', () => {
+const manager = new DiskManager(token);
+
+describe('DiskManager', () => {
   describe('getStatus', () => {
-    it('should return status object if successfully retrieved disk manager status', async () => {
+    it('should be instance of Status', async () => {
       const res = await manager.getStatus();
-      expect(res.totalSpace).to.be.a('number');
-      expect(res.usedSpace).to.be.a('number');
+      expect(res).instanceOf(StatusData);
     });
   });
 
   describe('createDir', () => {
     afterEach(async () => {
-      await manager.deleteResource(`/${instanceId}/createDir.test-dir`);
+      await manager.deleteResource(`/${idFromToken}/manager__create-dir__dir`);
     });
 
-    it('should return true if dir sucessfully created', async () => {
-      const res = await manager.createDir(`/${instanceId}/createDir.test-dir`);
+    it('sshould return true if the directory was sucessfully created', async () => {
+      const res = await manager.createDir(`/${idFromToken}/manager__create-dir__dir`);
       expect(res).to.eq(true);
     });
 
-    describe('dir already exists', () => {
+    describe('directory already exists', () => {
       before(async () => {
-        await manager.createDir(`/${instanceId}/createDir.test-dir`);
+        await manager.createDir(`/${idFromToken}/manager__create-dir__dir`);
       });
 
-      it('should throw DiskError error if dir already exists', async () => {
+      it('should throw DiskError error if directory already exists', async () => {
         try {
-          await manager.createDir(`/${instanceId}/createDir.test-dir`);
+          await manager.createDir(`/${idFromToken}/manager__create-dir__dir`);
         } catch (e) {
           expect(e).instanceOf(DiskError);
         }
@@ -43,138 +45,179 @@ describe('manager', () => {
     });
   });
 
-  describe('getDirList', () => {
-    it('should return array of resource if successfully retrieved', async () => {
-      const res = await manager.getDirList(`/${instanceId}`);
-      expect(res).to.be.an('array');
+  describe('getResourceMetadata', async () => {
+    it('should return the correct type if metadata for the directory was successfully retrieved', async () => {
+      const res = await manager.getResourceMetadata('/');
+      expect(res.type).to.eq(ResourceType.Directory);
     });
 
     describe('file', () => {
       before(async () => {
-        await manager.uploadFile(Buffer.alloc(1), { dir: '/', name: 'getDirList.test-file' });
+        await manager.uploadFile(Buffer.from('hello world'), {
+          folder: '/',
+          filename: 'manager__get-resource-metadata__file',
+        });
       });
 
       after(async () => {
-        await manager.deleteResource(`/${instanceId}/getDirList.test-file`);
+        await manager.deleteResource(`/${idFromToken}/manager__get-resource-metadata__file`);
       });
 
-      it('should return BadResourceType error if trying to get dir list of file', async () => {
+      it('should return the correct type if metadata for the file was successfully retrieved', async () => {
+        const res = await manager.getResourceMetadata(
+          `/${idFromToken}/manager__get-resource-metadata__file`,
+        );
+        expect(res.type).to.eq(ResourceType.File);
+      });
+    });
+  });
+
+  describe('getDirList', () => {
+    it('should be instance of Resources', async () => {
+      const res = await manager.getDirList('/');
+      expect(res).instanceOf(Resources);
+    });
+
+    describe('file', () => {
+      before(async () => {
+        await manager.uploadFile(Buffer.from('hello world'), {
+          folder: '/',
+          filename: 'manager__get-dir-list__file',
+        });
+      });
+
+      after(async () => {
+        await manager.deleteResource(`/${idFromToken}/manager__get-dir-list__file`);
+      });
+
+      it('should throw InvalidResourceType when trying to apply getDirList to a file', async () => {
         try {
-          await manager.getDirList(`/${instanceId}/getDirList.test-file`);
+          await manager.getDirList(`/${idFromToken}/manager__get-dir-list__file`);
         } catch (e) {
-          expect(e).instanceOf(BadResourceType);
+          expect(e).instanceOf(InvalidResourceType);
         }
       });
     });
   });
 
   describe('getFileLink', () => {
-    describe('dir', () => {
-      it('should throw BadResourceType error if trying to get link to dir', async () => {
+    describe('directory', () => {
+      it('should throw InvalidResourceType when trying to get link to a directory', async () => {
         try {
-          await manager.getFileLink(`/${instanceId}`);
+          await manager.getFileLink('/');
         } catch (e) {
-          expect(e).instanceOf(BadPathPart);
+          expect(e).instanceOf(InvalidResourceType);
         }
       });
     });
 
     describe('file', () => {
       before(async () => {
-        await manager.uploadFile(Buffer.alloc(1), { dir: '/', name: 'getFileLink.test-file' });
+        await manager.uploadFile(Buffer.from('hello world'), {
+          folder: '/',
+          filename: 'manager__get-file-link__file',
+        });
       });
 
       after(async () => {
-        await manager.deleteResource(`/${instanceId}/getFileLink.test-file`);
+        await manager.deleteResource(`/${idFromToken}/manager__get-file-link__file`);
       });
 
-      it('should return link to file if successfully retrieved', async () => {
-        const res = await manager.getFileLink(`/${instanceId}/getFileLink.test-file`);
-        expect(res).to.be.a('string');
+      it('should return a link to the file if successfully retrieved', async () => {
+        const res = await manager.getFileLink(`/${idFromToken}/manager__get-file-link__file`);
+        expect(res.url).to.be.a('string');
       });
     });
   });
 
   describe('uploadFile', () => {
+    const buffer = Buffer.from('hello world');
+    // Buffer.from('hello world') => 2aae6c
+
     describe('without options', () => {
       after(async () => {
-        await manager.deleteResource(`/${instanceId}/5ba93`);
+        await manager.deleteResource(`/${idFromToken}/2aae6c`);
       });
 
-      it('should return path to file if successfully uploaded file', async () => {
-        const res = await manager.uploadFile(Buffer.alloc(1));
+      it('should return the path to the file if successfully uploaded', async () => {
+        const res = await manager.uploadFile(buffer);
         expect(res).to.be.a('string');
       });
     });
 
-    describe('with name option', () => {
+    describe('with options.filename', () => {
       after(async () => {
-        await manager.deleteResource(`/${instanceId}/5ba93`);
+        await manager.deleteResource(`/${idFromToken}/42ad4f`);
       });
 
-      it('should return path to file if successfully uploaded file', async () => {
-        const res = await manager.uploadFile(Buffer.alloc(1), { name: 'test-file' });
-        expect(res)
-          .to.be.a('string')
-          .and.match(/\/[a-z0-9]{5}\/[a-z0-9]{5}\/test-file/);
+      it('should return the path to the file if successfully uploaded', async () => {
+        // Buffer.from('hello world 2') => 42ad4f
+        const res = await manager.uploadFile(Buffer.from('hello world 2'), {
+          filename: 'manager__upload-file__file',
+        });
+        expect(res).to.be.a('string');
       });
     });
 
-    describe('with ext option', () => {
+    describe('with options.extension', () => {
       after(async () => {
-        await manager.deleteResource(`/${instanceId}/5ba93`);
+        await manager.deleteResource(`/${idFromToken}/2aae6c`);
       });
 
       it('should return path to file if successfully uploaded file', async () => {
-        const res = await manager.uploadFile(Buffer.alloc(1), { ext: 'bin' });
+        const res = await manager.uploadFile(buffer, { extension: 'bin' });
         expect(res)
           .to.be.a('string')
-          .and.match(/\/[a-z0-9]{5}\/[a-z0-9]{5}\/[a-z0-9]{40}\.bin/);
+          .and.matches(/\.bin?/);
       });
     });
 
-    describe('with dir option', () => {
+    describe('with options.folder', () => {
       after(async () => {
-        await manager.deleteResource(`/${instanceId}/uploadFile.test-dir`);
+        await manager.deleteResource(`/${idFromToken}/manager__upload-file__dir`);
       });
 
-      it('should return path to file with provided root path if successfully uploaded file', async () => {
-        const res = await manager.uploadFile(Buffer.alloc(1), { dir: '/uploadFile.test-dir' });
-        expect(res)
-          .to.be.a('string')
-          .and.match(/\/[a-z0-9]{5}\/uploadFile\.test-dir\/[a-z0-9]{40}/);
+      it('should return the path to the file if successfully uploaded', async () => {
+        const res = await manager.uploadFile(buffer, {
+          folder: '/manager__upload-file__dir',
+        });
+        expect(res).to.be.a('string');
       });
     });
   });
 
   describe('deleteResource', () => {
-    it('should throw DiskError if resource doesnt exists', async () => {
+    it("should throw a disk error if the resource doesn't exist", async () => {
       try {
-        await manager.deleteResource(`/${instanceId}/deleteResource.nonexistent-resource`);
+        await manager.deleteResource(
+          `/${idFromToken}/manager__delete-resource__nonexistent-resource`,
+        );
       } catch (e) {
         expect(e).instanceOf(DiskError);
-        expect(e.message).to.eq('Resource not found');
       }
     });
 
-    describe('dir', () => {
+    describe('directory', () => {
       before(async () => {
-        await manager.createDir(`/${instanceId}/deleteResource.test-dir`);
+        await manager.createDir(`/${idFromToken}/manager__delete-resource__dir`);
       });
 
-      it('should return true if sucessfully deleted', async () => {
-        const res = await manager.deleteResource(`/${instanceId}/deleteResource.test-dir`);
+      it('should return true on successful deletion', async () => {
+        const res = await manager.deleteResource(`/${idFromToken}/manager__delete-resource__dir`);
         expect(res).to.eq(true);
       });
     });
 
     describe('file', () => {
       before(async () => {
-        await manager.uploadFile(Buffer.alloc(1), { dir: '/', name: 'deleteResource.test-file' });
+        await manager.uploadFile(Buffer.alloc(1), {
+          folder: '/',
+          filename: 'manager__delete-resource__file',
+        });
       });
 
-      it('should return true if sucessfully deleted', async () => {
-        const res = await manager.deleteResource(`/${instanceId}/deleteResource.test-file`);
+      it('should return true on successful deletion', async () => {
+        const res = await manager.deleteResource(`/${idFromToken}/manager__delete-resource__file`);
         expect(res).to.eq(true);
       });
     });

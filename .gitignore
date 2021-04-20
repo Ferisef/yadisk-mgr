@@ -3,7 +3,6 @@ lib
 
 # modules
 node_modules
-yarn.lock
 
 # log files
 *.log

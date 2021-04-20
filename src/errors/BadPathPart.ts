@@ -1,8 +1,8 @@
 import DiskError from './DiskError';
 
 class BadPathPart extends DiskError {
-  constructor(path: string) {
-    super(`Bad path part ${path}`);
+  public constructor(path: string) {
+    super(`Specified path "${path}" doesn't exists.`);
   }
 }
 

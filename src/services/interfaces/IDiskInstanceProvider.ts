@@ -1,12 +1,12 @@
-import { DiskInstance } from '../../instance';
+import DiskInstance from '../DiskInstance';
 
 interface IDiskInstanceProvider {
-  set: (key: string, value: DiskInstance) => IDiskInstanceProvider;
-  get: (key: string) => DiskInstance;
-  tryGet: (key: string) => DiskInstance | null;
-  has: (key: string) => boolean;
-  delete: (key: string) => boolean;
-  items: () => IterableIterator<DiskInstance>;
+  set(instance: DiskInstance): IDiskInstanceProvider;
+  get(id: string): DiskInstance;
+  tryGet(id: string): DiskInstance | null;
+  has(id: string): boolean;
+  delete(id: string): boolean;
+  items: DiskInstance[];
 }
 
 export default IDiskInstanceProvider;
